@@ -33,28 +33,16 @@ PRECOMPILED_PATTERNS = {
     'spanish': re.compile(r'[a-záéíóúñüç]', re.IGNORECASE)
 }
 
-# Configuración ultra-optimizada para GH200 con 500GB RAM (mejorada con patterns lockless)
-ULTRA_CONFIG = {
-    'MAX_WORKERS': min(256, os.cpu_count() * 4),  # Incrementado para máximo rendimiento
-    'BATCH_SIZE': 100000,  # Batches ultra-masivos para aprovechar RAM
-    'QUEUE_SIZE': 1000,  # Colas ultra-masivas para evitar bloqueos
-    'MEMORY_BUFFER_GB': 300,  # 300GB de buffer para GH200
-    'TARGET_SPEED': 100000,  # 100K páginas/segundo objetivo ultra-agresivo
-    'PROCESSING_THREADS': 3,  # Threads especializados por tipo
-    'AUTO_FLUSH_THRESHOLD': 200000,  # Flush cada 200K artículos (ultra-masivo)
-    'TURBO_MODE': True,
-    'ULTRA_AGGRESSIVE_MODE': True,  # Modo ultra-agresivo sin esperas
-    'LOCKLESS_STATS': True,  # Estadísticas atómicas sin locks
-    'STREAMING_BUFFERS': True,  # Buffers en modo streaming continuo
-    'FORCE_EXIT_TIMEOUT': 10,  # Timeout máximo antes de forzar salida
-    'WORKER_TIMEOUT': 0.5,  # Timeout para workers
-    'MAX_FINALIZATION_TIME': 15,  # Tiempo máximo para finalización
-}
+# Importar configuraciones dinámicas por hardware
+from hardware_configs import get_hardware_config, print_hardware_info
+
+# Configuración adaptativa según hardware detectado
+ULTRA_CONFIG = get_hardware_config()
 
 class UltraOptimizedProcessor:
     """Procesador ultra-optimizado con specialización de workers"""
     
-    def __init__(self):
+    def __init__(self, output_dir: str = "data_ultra_hybrid"):
         self.num_workers = ULTRA_CONFIG['MAX_WORKERS']
         self.batch_size = ULTRA_CONFIG['BATCH_SIZE']
         
@@ -78,7 +66,7 @@ class UltraOptimizedProcessor:
         }
         
         # Output management (mejorado con counter atómico lockless)
-        self.output_dir = Path("data_ultra_hybrid")
+        self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.file_counter = 0  # Counter atómico simple (sin lock explícito)
         
@@ -89,7 +77,8 @@ class UltraOptimizedProcessor:
         print(f"🚀 ULTRA-OPTIMIZED PROCESSOR:")
         print(f"   🔄 Workers: Extract({self.num_workers//3}), Process({self.num_workers//3}), Output({self.num_workers//3})")
         print(f"   📦 Batch size: {self.batch_size:,}")
-        print(f"   💾 Memory buffer: {ULTRA_CONFIG['MEMORY_BUFFER_GB']}GB")
+        print(f"   � Output dir: {self.output_dir}")
+        print(f"   �💾 Memory buffer: {ULTRA_CONFIG['MEMORY_BUFFER_GB']}GB")
     
     def start_workers(self):
         """Inicia todos los pools de workers especializados"""
@@ -659,12 +648,18 @@ def main():
     
     print(f"🚀 CAROLINE ULTRA EXTRACTOR - VERSIÓN HÍBRIDA")
     print(f"🎯 OBJETIVO: {ULTRA_CONFIG['TARGET_SPEED']:,} páginas/segundo")
+    # Mostrar información del hardware detectado
+    print("=" * 80)
+    print_hardware_info()
+    print("=" * 80)
+    
     print(f"📁 XML: {xml_path.name} ({xml_path.stat().st_size / (1024**3):.1f}GB)")
+    print(f"🎯 OBJETIVO: {ULTRA_CONFIG['TARGET_SPEED']:,} páginas/segundo")
     print(f"⚡ TURBO MODE: {'✅' if ULTRA_CONFIG['TURBO_MODE'] else '❌'}")
     
     try:
-        # Crear procesador ultra-optimizado
-        processor = UltraOptimizedProcessor()
+        # Crear procesador ultra-optimizado con directorio configurable
+        processor = UltraOptimizedProcessor(args.output)
         
         # Iniciar workers especializados
         processor.start_workers()

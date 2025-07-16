@@ -1,0 +1,49 @@
+# Directorios de datos
+data_*/
+
+# Archivo de configuración local (no commitear)
+init.sh
+
+# Archivos de log y rendimiento
+*.log
+performance_*.txt
+benchmark_*.txt
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Archivos de backup
+*.bak
+*.backup
+*_old.*
+*_backup.*
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Directorios de prueba y salida
+consciencia*/
+wiki-datasets/
+test_*/
+*_test/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de configuración local
+local_config.py
+.env
+.venv
+env/
+venv/
+
+# Archivos de descarga grandes
+*.xml
+*.xml.bz2
+*.torrent
+*.dump
