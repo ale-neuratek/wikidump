@@ -13,6 +13,11 @@ benchmark_*.txt
 *.tmp
 *.temp
 
+# Archivos de Hugging Face (sensibles)
+upload_to_hf.py
+hf_upload.log
+*.hf_token
+
 # Archivos de backup
 *.bak
 *.backup

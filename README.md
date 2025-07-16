@@ -38,6 +38,33 @@ python adaptive_processor.py --input data_ultra_hybrid --output wiki_conversatio
 python main_wikidump_processor.py --xml data_wiki/eswiki.xml --output wiki_conversations
 ```
 
+### Opción 3: Publicación en Hugging Face
+```bash
+# Desde init.sh (automático tras procesamiento)
+./init.sh
+
+# Independiente (para datasets ya procesados)
+./publish_to_hf.sh wiki_conversations ale-neuratek/wikidump
+```
+
+## 🤗 Publicación Automática en Hugging Face
+
+### ✨ Características
+- **🔐 Repositorio privado**: ale-neuratek/wikidump
+- **📊 Metadatos automáticos**: README con estadísticas detalladas
+- **🗂️ Estructura preservada**: Mantiene organización por categorías
+- **🔒 Autenticación SSH**: Configuración segura automática
+- **📈 Análisis de contenido**: Cuenta conversaciones, categorías, tamaño
+
+### 🛠️ Configuración Requerida
+1. **Cuenta Hugging Face**: https://huggingface.co
+2. **Token de acceso**: Con permisos de escritura
+3. **Git LFS**: Instalación automática incluida
+
+### 📦 Scripts Disponibles
+- **`init.sh`**: Pipeline completo + publicación automática
+- **`publish_to_hf.sh`**: Publicación independiente de datasets existentes
+
 ## 📊 Rendimiento Validado
 
 - **623,708 conversaciones** generadas en pruebas
@@ -121,9 +148,10 @@ wiki_conversations/
 1. **Afinación de hardware_configs.py** para eliminar warnings de cola
 2. **Optimización para datasets masivos** (>1M artículos)
 3. **Validación en hardware GH200/8xH100**
+4. **✅ Publicación automática en Hugging Face** (COMPLETADO)
 
 ---
 
-**Estado:** ✅ Listo para producción con configuración actual  
+**Estado:** ✅ Listo para producción con publicación automática  
 **Última actualización:** 2025-07-16  
-**Commit:** Pipeline funcional completo
+**Commit:** Pipeline funcional completo + Hugging Face integration
