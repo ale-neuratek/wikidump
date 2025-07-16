@@ -1,0 +1,18 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting huggingface_hub
+  Downloading huggingface_hub-0.33.4-py3-none-any.whl (515 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 515.3/515.3 KB 4.8 MB/s eta 0:00:00
+Collecting hf-xet<2.0.0,>=1.1.2
+  Downloading hf_xet-1.1.5-cp37-abi3-manylinux_2_28_aarch64.whl (3.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.0/3.0 MB 11.1 MB/s eta 0:00:00
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /usr/lib/python3/dist-packages (from huggingface_hub) (4.10.0)
+Requirement already satisfied: pyyaml>=5.1 in /usr/lib/python3/dist-packages (from huggingface_hub) (5.4.1)
+Requirement already satisfied: fsspec>=2023.5.0 in /usr/lib/python3/dist-packages (from huggingface_hub) (2024.3.1)
+Requirement already satisfied: packaging>=20.9 in /usr/lib/python3/dist-packages (from huggingface_hub) (21.3)
+Collecting tqdm>=4.42.1
+  Downloading tqdm-4.67.1-py3-none-any.whl (78 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 78.5/78.5 KB 17.8 MB/s eta 0:00:00
+Requirement already satisfied: requests in /usr/lib/python3/dist-packages (from huggingface_hub) (2.25.1)
+Requirement already satisfied: filelock in /usr/lib/python3/dist-packages (from huggingface_hub) (3.6.0)
+Installing collected packages: tqdm, hf-xet, huggingface_hub
+Successfully installed hf-xet-1.1.5 huggingface_hub-0.33.4 tqdm-4.67.1
