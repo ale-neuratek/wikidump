@@ -18,7 +18,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from hardware_configs import get_hardware_config, optimize_for_queue_issues, diagnose_dataset_configuration
+from hardware_configs import get_hardware_config
 
 class AdaptiveProcessor:
     """Procesador adaptativo que optimiza automáticamente según el dataset"""
@@ -26,7 +26,7 @@ class AdaptiveProcessor:
     def __init__(self):
         self.start_time = time.time()
         self.log_file = "adaptive_processing.log"
-        self.log_interval = 1 * 60  # 1 minuto para más seguimiento
+        self.log_interval = 5 * 60  # 5 minutos
         self.last_log_time = time.time()
         
         # Limpiar log anterior
@@ -121,13 +121,8 @@ class AdaptiveProcessor:
         """Obtiene configuración optimizada según el dataset"""
         total_articles = dataset_info['total_articles']
         
-        # Obtener configuración base del hardware adaptada al dataset
+        # Obtener configuración base del hardware
         base_config = get_hardware_config(dataset_size_articles=total_articles)
-        
-        # Aplicar optimizaciones específicas para evitar cuellos de botella de colas
-        if total_articles > 1300000:
-            self.logger.log(f"🔧 Dataset masivo detectado ({total_articles:,} artículos) - Aplicando optimizaciones anti-bloqueo")
-            base_config = optimize_for_queue_issues(base_config, total_articles)
         
         # Configuraciones específicas para el procesamiento
         optimized_config = {
@@ -176,11 +171,6 @@ class AdaptiveProcessor:
         
         # Obtener configuración optimizada
         config = self.get_optimized_config(dataset_info)
-        
-        # Realizar diagnóstico detallado para datasets masivos
-        if dataset_info['total_articles'] > 1000000:
-            self.log(f"🔍 DIAGNÓSTICO DETALLADO DE CONFIGURACIÓN", force=True)
-            diagnose_dataset_configuration(dataset_info['total_articles'])
         
         # Importar el procesador simplificado
         from simple_processor import MassiveParallelDatasetProcessor

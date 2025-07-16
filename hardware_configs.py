@@ -49,6 +49,10 @@ def get_hardware_config(hardware_type: str = None, dataset_size_articles: int = 
             'WORKER_TIMEOUT': 0.3,  # Timeout más agresivo
             'MAX_FINALIZATION_TIME': 20,
             
+            # Configuraciones específicas para manejo de colas
+            'MAX_QUEUE_RETRIES': 100,  # Base para datasets normales
+            'QUEUE_TIMEOUT': 2.0,  # Timeout base para reintentos
+            
             # ========= CONFIGURACIÓN SEGUNDA ETAPA GH200 =========
             'CATEGORY_WORKERS': 96,  # 1/3 de workers para categorización
             'CONVERSATION_WORKERS': 96,  # 1/3 para generación de conversaciones
@@ -75,6 +79,10 @@ def get_hardware_config(hardware_type: str = None, dataset_size_articles: int = 
             'FORCE_EXIT_TIMEOUT': 20,
             'WORKER_TIMEOUT': 0.2,  # Timeout ultra-agresivo
             'MAX_FINALIZATION_TIME': 30,
+            
+            # Configuraciones específicas para manejo de colas
+            'MAX_QUEUE_RETRIES': 200,  # Base más alta para hardware premium
+            'QUEUE_TIMEOUT': 1.0,  # Timeout base para reintentos
             
             # ========= CONFIGURACIÓN SEGUNDA ETAPA 8xH100 =========
             'CATEGORY_WORKERS': 170,  # ~1/3 de workers
@@ -105,6 +113,10 @@ def get_hardware_config(hardware_type: str = None, dataset_size_articles: int = 
             'WORKER_TIMEOUT': 1.0,
             'MAX_FINALIZATION_TIME': 15,
             
+            # Configuraciones específicas para manejo de colas
+            'MAX_QUEUE_RETRIES': 30,  # Base conservadora para hardware estándar
+            'QUEUE_TIMEOUT': 5.0,  # Timeout más permisivo
+            
             # Segunda etapa estándar
             'CATEGORY_WORKERS': 16,
             'CONVERSATION_WORKERS': 16,
@@ -125,27 +137,45 @@ def get_hardware_config(hardware_type: str = None, dataset_size_articles: int = 
         if dataset_size_articles < 10000:
             # Dataset muy pequeño - configuración mínima
             scale_factor = 0.02
-            print(f"📉 Dataset muy pequeño - Reduciendo workers 50x")
+            queue_multiplier = 0.1
+            batch_multiplier = 0.01
+            print(f"📉 Dataset muy pequeño - Configuración mínima")
         elif dataset_size_articles < 50000:
             # Dataset pequeño - configuración reducida
             scale_factor = 0.05
-            print(f"📉 Dataset pequeño - Reduciendo workers 20x")
+            queue_multiplier = 0.2
+            batch_multiplier = 0.05
+            print(f"📉 Dataset pequeño - Configuración reducida")
         elif dataset_size_articles < 200000:
             # Dataset mediano - configuración moderada
             scale_factor = 0.1
-            print(f"📉 Dataset mediano - Reduciendo workers 10x")
+            queue_multiplier = 0.4
+            batch_multiplier = 0.1
+            print(f"📉 Dataset mediano - Configuración moderada")
         elif dataset_size_articles < 500000:
             # Dataset grande pero no masivo
             scale_factor = 0.3
-            print(f"📊 Dataset grande - Reduciendo workers 3x")
+            queue_multiplier = 0.7
+            batch_multiplier = 0.3
+            print(f"📊 Dataset grande - Configuración parcial")
         elif dataset_size_articles < 1000000:
             # Dataset muy grande
             scale_factor = 0.6
+            queue_multiplier = 0.9
+            batch_multiplier = 0.6
             print(f"📈 Dataset muy grande - Configuración casi completa")
-        else:
-            # Dataset masivo - configuración completa
+        elif dataset_size_articles < 2000000:
+            # Dataset masivo - configuración completa + optimizaciones anti-bloqueo
             scale_factor = 1.0
-            print(f"🚀 Dataset masivo - Configuración completa")
+            queue_multiplier = 1.5  # 50% más colas para datasets masivos
+            batch_multiplier = 0.8  # Batches ligeramente más pequeños para flujo constante
+            print(f"🚀 Dataset masivo (1-2M) - Configuración optimizada anti-bloqueo")
+        else:
+            # Dataset ultra-masivo - configuración extrema
+            scale_factor = 1.0
+            queue_multiplier = 2.0  # Colas dobles para datasets ultra-masivos
+            batch_multiplier = 0.6  # Batches más pequeños para máximo throughput
+            print(f"🔥 Dataset ultra-masivo (>2M) - Configuración extrema")
         
         # Aplicar factor de escala a workers
         base_config = base_config.copy()
@@ -154,40 +184,198 @@ def get_hardware_config(hardware_type: str = None, dataset_size_articles: int = 
         base_config['CONVERSATION_WORKERS'] = max(2, int(base_config.get('CONVERSATION_WORKERS', 16) * scale_factor))
         base_config['OUTPUT_WORKERS'] = max(2, int(base_config.get('OUTPUT_WORKERS', 16) * scale_factor))
         
-        # Adaptar tamaños de cola y batch
-        if scale_factor < 0.1:
-            base_config['QUEUE_SIZE'] = max(10, base_config['QUEUE_SIZE'] // 20)
-            base_config['DATASET_QUEUE_SIZE'] = max(50, base_config.get('DATASET_QUEUE_SIZE', 1000) // 20)
-            base_config['BATCH_SIZE'] = max(100, base_config['BATCH_SIZE'] // 100)
-            base_config['CONVERSATION_BATCH_SIZE'] = max(1000, base_config.get('CONVERSATION_BATCH_SIZE', 10000) // 10)
-        elif scale_factor < 0.3:
-            base_config['QUEUE_SIZE'] = max(50, base_config['QUEUE_SIZE'] // 10)
-            base_config['DATASET_QUEUE_SIZE'] = max(100, base_config.get('DATASET_QUEUE_SIZE', 1000) // 10)
-            base_config['BATCH_SIZE'] = max(1000, base_config['BATCH_SIZE'] // 20)
-            base_config['CONVERSATION_BATCH_SIZE'] = max(5000, base_config.get('CONVERSATION_BATCH_SIZE', 10000) // 2)
+        # Adaptar tamaños de cola con multiplicadores específicos
+        base_config['QUEUE_SIZE'] = max(10, int(base_config['QUEUE_SIZE'] * queue_multiplier))
+        base_config['DATASET_QUEUE_SIZE'] = max(50, int(base_config.get('DATASET_QUEUE_SIZE', 1000) * queue_multiplier))
+        
+        # Adaptar batch sizes
+        base_config['BATCH_SIZE'] = max(100, int(base_config['BATCH_SIZE'] * batch_multiplier))
+        base_config['CONVERSATION_BATCH_SIZE'] = max(1000, int(base_config.get('CONVERSATION_BATCH_SIZE', 10000) * batch_multiplier))
+        
+        # Configuraciones específicas para datasets masivos (>1.3M artículos)
+        if dataset_size_articles > 1300000:
+            print(f"🔧 APLICANDO OPTIMIZACIONES ANTI-BLOQUEO PARA DATASETS >1.3M")
+            
+            # Aumentar significativamente los límites de reintentos para colas
+            base_config['MAX_QUEUE_RETRIES'] = min(500, dataset_size_articles // 5000)  # Escalar con dataset
+            base_config['QUEUE_TIMEOUT'] = 0.1  # Timeout más agresivo
+            
+            # Configuración dinámica de flush más frecuente
+            base_config['AUTO_FLUSH_THRESHOLD'] = min(base_config.get('AUTO_FLUSH_THRESHOLD', 100000), 
+                                                     dataset_size_articles // 10)  # Flush cada 10% del dataset
+            
+            # Buffer de memoria expandido para datasets masivos
+            if hardware_type in ["GH200", "8xH100"]:
+                base_config['MEMORY_BUFFER_GB'] = min(base_config['MEMORY_BUFFER_GB'] * 1.2, 
+                                                     psutil.virtual_memory().total / (1024**3) * 0.85)
+            
+            # Configuraciones de timeout más permisivas para datasets masivos
+            base_config['WORKER_TIMEOUT'] = max(base_config.get('WORKER_TIMEOUT', 1.0), 0.5)
+            base_config['FORCE_EXIT_TIMEOUT'] = max(base_config.get('FORCE_EXIT_TIMEOUT', 10), 30)
+            base_config['MAX_FINALIZATION_TIME'] = max(base_config.get('MAX_FINALIZATION_TIME', 15), 60)
+            
+            print(f"   ⚡ Max queue retries: {base_config['MAX_QUEUE_RETRIES']}")
+            print(f"   ⏱️ Queue timeout: {base_config['QUEUE_TIMEOUT']}s")
+            print(f"   💾 Auto flush threshold: {base_config['AUTO_FLUSH_THRESHOLD']:,}")
         
         print(f"📊 CONFIGURACIÓN ADAPTADA:")
         print(f"   🔄 Workers: {base_config['MAX_WORKERS']} (Cat: {base_config.get('CATEGORY_WORKERS', 'N/A')}, Conv: {base_config.get('CONVERSATION_WORKERS', 'N/A')}, Out: {base_config.get('OUTPUT_WORKERS', 'N/A')})")
         print(f"   📦 Batch size: {base_config['BATCH_SIZE']:,}")
-        print(f"   🗂️ Queue size: {base_config['QUEUE_SIZE']:,}")
+        print(f"   🗂️ Queue size: {base_config['QUEUE_SIZE']:,} (Dataset: {base_config.get('DATASET_QUEUE_SIZE', 'N/A'):,})")
     
     return base_config
 
-def print_hardware_info():
-    """Imprime información del hardware detectado"""
+def print_hardware_info(dataset_size: int = None):
+    """Imprime información del hardware detectado y configuración optimizada"""
     hardware_type = detect_hardware()
-    config = get_hardware_config(hardware_type)
+    config = get_hardware_config(hardware_type, dataset_size)
     
     total_ram = psutil.virtual_memory().total / (1024**3)
     cpu_count = os.cpu_count()
     
-    print(f"🖥️  HARDWARE DETECTADO: {hardware_type}")
+    print(f"\n🖥️  INFORMACIÓN DE HARDWARE Y CONFIGURACIÓN")
+    print(f"{'='*60}")
+    print(f"🖥️  Hardware detectado: {hardware_type}")
     print(f"💾 RAM Total: {total_ram:.1f}GB")
     print(f"🔄 CPU Cores: {cpu_count}")
-    print(f"⚡ Workers Configurados: {config['MAX_WORKERS']}")
-    print(f"📦 Batch Size: {config['BATCH_SIZE']:,}")
-    print(f"🎯 Target Speed: {config['TARGET_SPEED']:,} páginas/segundo")
-    print(f"💾 Memory Buffer: {config['MEMORY_BUFFER_GB']}GB")
+    print(f"{'='*60}")
+    print(f"⚡ Workers configurados: {config['MAX_WORKERS']}")
+    print(f"📦 Batch size: {config['BATCH_SIZE']:,}")
+    print(f"🗂️ Queue size: {config['QUEUE_SIZE']:,}")
+    print(f"🎯 Target speed: {config['TARGET_SPEED']:,} páginas/segundo")
+    print(f"💾 Memory buffer: {config['MEMORY_BUFFER_GB']}GB")
     
+    if dataset_size:
+        print(f"\n📊 CONFIGURACIÓN ESPECÍFICA PARA {dataset_size:,} ARTÍCULOS:")
+        print(f"   ⚡ Queue retries: {config.get('MAX_QUEUE_RETRIES', 30)}")
+        print(f"   ⏱️ Queue timeout: {config.get('QUEUE_TIMEOUT', 1.0)}s")
+        print(f"   💾 Auto flush threshold: {config.get('AUTO_FLUSH_THRESHOLD', 100000):,}")
+        
+        if dataset_size > 1300000:
+            print(f"   🔥 OPTIMIZACIONES ANTI-BLOQUEO ACTIVADAS")
+    
+    print(f"{'='*60}")
+
+def test_configuration_for_dataset_size(dataset_size: int):
+    """Función de prueba para verificar configuraciones para diferentes tamaños de dataset"""
+    print(f"\n🧪 PRUEBA DE CONFIGURACIÓN PARA {dataset_size:,} ARTÍCULOS")
+    
+    config = diagnose_dataset_configuration(dataset_size)
+    optimized = optimize_for_queue_issues(config, dataset_size)
+    
+    print(f"\n🔬 COMPARACIÓN ANTES/DESPUÉS:")
+    print(f"   Queue retries: {config.get('MAX_QUEUE_RETRIES', 30)} → {optimized['MAX_QUEUE_RETRIES']}")
+    print(f"   Queue timeout: {config.get('QUEUE_TIMEOUT', 1.0):.2f}s → {optimized['QUEUE_TIMEOUT']:.2f}s")
+    print(f"   Queue size: {config['QUEUE_SIZE']:,} → {optimized['QUEUE_SIZE']:,}")
+    
+    return optimized
+
+def diagnose_dataset_configuration(dataset_size_articles: int, hardware_type: str = None) -> Dict[str, Any]:
+    """Diagnóstica y recomienda configuración óptima para un dataset específico"""
+    
+    if hardware_type is None:
+        hardware_type = detect_hardware()
+    
+    config = get_hardware_config(hardware_type, dataset_size_articles)
+    
+    print(f"\n🔍 DIAGNÓSTICO DE CONFIGURACIÓN")
+    print(f"{'='*60}")
+    print(f"📊 Dataset: {dataset_size_articles:,} artículos")
+    print(f"🖥️  Hardware: {hardware_type}")
+    print(f"{'='*60}")
+    
+    # Análisis de riesgo de cuellos de botella
+    if dataset_size_articles > 1300000:
+        risk_level = "🔥 ALTO"
+        recommendations = [
+            f"✅ Queue retries aumentados a {config['MAX_QUEUE_RETRIES']} (era 30-100)",
+            f"✅ Queue timeout optimizado a {config['QUEUE_TIMEOUT']}s (era 2-5s)",
+            f"✅ Colas expandidas a {config['QUEUE_SIZE']:,} (dataset: {config['DATASET_QUEUE_SIZE']:,})",
+            f"✅ Auto-flush cada {config['AUTO_FLUSH_THRESHOLD']:,} artículos",
+            f"✅ Timeouts extendidos para finalización ({config['MAX_FINALIZATION_TIME']}s)"
+        ]
+    elif dataset_size_articles > 1000000:
+        risk_level = "⚠️ MEDIO"
+        recommendations = [
+            f"✅ Configuración casi completa aplicada",
+            f"✅ Monitoreo recomendado de colas durante procesamiento",
+            f"✅ Workers balanceados para {config['MAX_WORKERS']} threads"
+        ]
+    else:
+        risk_level = "✅ BAJO"
+        recommendations = [
+            f"✅ Configuración estándar suficiente",
+            f"✅ Sin optimizaciones especiales necesarias"
+        ]
+    
+    print(f"🚨 Riesgo de cuellos de botella: {risk_level}")
+    print(f"\n📋 RECOMENDACIONES:")
+    for rec in recommendations:
+        print(f"   {rec}")
+    
+    # Estimación de rendimiento
+    estimated_time = dataset_size_articles / config['TARGET_SPEED']
+    estimated_hours = estimated_time / 3600
+    
+    print(f"\n⏱️  ESTIMACIÓN DE RENDIMIENTO:")
+    print(f"   🎯 Target speed: {config['TARGET_SPEED']:,} artículos/segundo")
+    print(f"   ⌛ Tiempo estimado: {estimated_hours:.1f} horas")
+    print(f"   💾 Memoria asignada: {config['MEMORY_BUFFER_GB']}GB")
+    
+    # Configuración de workers detallada
+    print(f"\n🔄 CONFIGURACIÓN DE WORKERS:")
+    print(f"   📝 Procesamiento: {config['MAX_WORKERS']} workers")
+    print(f"   🏷️  Categorización: {config.get('CATEGORY_WORKERS', 'N/A')} workers")
+    print(f"   💬 Conversaciones: {config.get('CONVERSATION_WORKERS', 'N/A')} workers")
+    print(f"   💾 Salida: {config.get('OUTPUT_WORKERS', 'N/A')} workers")
+    
+    return config
+
+def optimize_for_queue_issues(current_config: Dict[str, Any], dataset_size: int) -> Dict[str, Any]:
+    """Optimiza configuración específicamente para evitar problemas de colas"""
+    
+    optimized = current_config.copy()
+    
+    if dataset_size > 1300000:
+        print(f"\n🔧 APLICANDO OPTIMIZACIONES ESPECÍFICAS PARA COLAS")
+        
+        # Factor de escalado basado en tamaño del dataset
+        scale_factor = min(5.0, dataset_size / 1300000)
+        
+        # Aumentar reintentos de cola exponencialmente
+        original_retries = optimized.get('MAX_QUEUE_RETRIES', 30)
+        optimized['MAX_QUEUE_RETRIES'] = min(1000, int(original_retries * scale_factor))
+        
+        # Reducir timeout para intentos más frecuentes
+        optimized['QUEUE_TIMEOUT'] = max(0.05, optimized.get('QUEUE_TIMEOUT', 1.0) / scale_factor)
+        
+        # Expandir colas proporcionalmente
+        optimized['QUEUE_SIZE'] = int(optimized['QUEUE_SIZE'] * min(3.0, scale_factor))
+        optimized['DATASET_QUEUE_SIZE'] = int(optimized.get('DATASET_QUEUE_SIZE', 1000) * min(3.0, scale_factor))
+        
+        # Reducir batch size para flujo más constante
+        optimized['BATCH_SIZE'] = max(1000, int(optimized['BATCH_SIZE'] * 0.7))
+        optimized['CONVERSATION_BATCH_SIZE'] = max(5000, int(optimized.get('CONVERSATION_BATCH_SIZE', 10000) * 0.8))
+        
+        # Flush más frecuente para datasets masivos
+        optimized['AUTO_FLUSH_THRESHOLD'] = min(optimized.get('AUTO_FLUSH_THRESHOLD', 100000), 
+                                               dataset_size // 20)  # Flush cada 5% del dataset
+        
+        print(f"   ⚡ Queue retries: {original_retries} → {optimized['MAX_QUEUE_RETRIES']}")
+        print(f"   ⏱️ Queue timeout: {current_config.get('QUEUE_TIMEOUT', 1.0):.2f}s → {optimized['QUEUE_TIMEOUT']:.2f}s")
+        print(f"   📦 Batch size: {current_config['BATCH_SIZE']:,} → {optimized['BATCH_SIZE']:,}")
+        print(f"   🗂️ Queue size: {current_config['QUEUE_SIZE']:,} → {optimized['QUEUE_SIZE']:,}")
+        print(f"   💾 Auto flush: {current_config.get('AUTO_FLUSH_THRESHOLD', 100000):,} → {optimized['AUTO_FLUSH_THRESHOLD']:,}")
+    
+    return optimized
+
 if __name__ == "__main__":
     print_hardware_info()
+    
+    # Pruebas de configuración para diferentes tamaños de dataset
+    print(f"\n🧪 PRUEBAS DE CONFIGURACIÓN PARA DIFERENTES TAMAÑOS:")
+    test_sizes = [50000, 500000, 1000000, 1500000, 2500000, 5000000]
+    
+    for size in test_sizes:
+        test_configuration_for_dataset_size(size)
+        print(f"\n{'-'*60}")

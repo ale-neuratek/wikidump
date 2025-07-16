@@ -60,6 +60,27 @@ python main_wikidump_processor.py --xml data_wiki/eswiki.xml --output wiki_conve
 - ⚠️ **Cola llena (101 reintentos)** - Requiere afinación de `hardware_configs.py`
 - 📈 Optimización para datasets >1M artículos
 
+## 🔧 Optimizaciones de Hardware
+
+### 🎯 Configuración Adaptativa Automática
+El sistema ajusta automáticamente la configuración según:
+- **Tamaño del dataset** (artículos estimados)
+- **Hardware detectado** (GH200, 8xH100, Estándar)
+- **Riesgo de cuellos de botella** en colas
+
+### 🚀 Optimizaciones Anti-Bloqueo para Datasets Masivos
+Para datasets >1.3M artículos se activan automáticamente:
+- ⚡ **Queue retries**: 100 → 300-1000 (según tamaño)
+- ⏱️ **Queue timeout**: 2.0s → 0.1-0.05s (más agresivo)
+- 🗂️ **Queue size**: Expandido 1.5x-3x (según dataset)
+- 💾 **Auto-flush**: Más frecuente (cada 5-10% del dataset)
+- 🔄 **Timeouts extendidos**: Para finalización limpia
+
+### 📊 Hardware Soportado
+- **GH200**: 288 workers, 400GB buffer, 150K artículos/s
+- **8xH100**: 512 workers, 600GB buffer, 250K artículos/s  
+- **Estándar**: Auto-detectado según recursos
+
 ## 🏗️ Arquitectura
 
 ```
