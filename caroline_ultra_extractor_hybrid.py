@@ -46,6 +46,9 @@ ULTRA_CONFIG = {
     'ULTRA_AGGRESSIVE_MODE': True,  # Modo ultra-agresivo sin esperas
     'LOCKLESS_STATS': True,  # Estadísticas atómicas sin locks
     'STREAMING_BUFFERS': True,  # Buffers en modo streaming continuo
+    'FORCE_EXIT_TIMEOUT': 10,  # Timeout máximo antes de forzar salida
+    'WORKER_TIMEOUT': 0.5,  # Timeout para workers
+    'MAX_FINALIZATION_TIME': 15,  # Tiempo máximo para finalización
 }
 
 class UltraOptimizedProcessor:
@@ -108,10 +111,12 @@ class UltraOptimizedProcessor:
     
     def _extraction_worker(self, worker_id: int):
         """Worker especializado en extracción rápida de datos básicos"""
-        while self.running:
+        start_time = time.time()
+        while self.running and (time.time() - start_time < 3600):  # Max 1 hora
             try:
-                raw_batch = self.raw_batch_queue.get(timeout=1)
+                raw_batch = self.raw_batch_queue.get(timeout=ULTRA_CONFIG['WORKER_TIMEOUT'])
                 if raw_batch is None:
+                    print(f"🔄 Extractor-{worker_id}: Señal de parada")
                     break
                 
                 # Extracción ultra-rápida (solo filtros básicos)
@@ -125,25 +130,35 @@ class UltraOptimizedProcessor:
                         extracted.append((title, text))
                 
                 if extracted:
-                    self.processed_queue.put(extracted)
-                    self.stats['batches_sent'] += 1
+                    try:
+                        self.processed_queue.put(extracted, timeout=0.1)
+                        self.stats['batches_sent'] += 1
+                    except queue.Full:
+                        print(f"⚠️ Extractor-{worker_id}: Cola procesamiento llena, descartando batch")
                 
                 self.raw_batch_queue.task_done()
                 
             except queue.Empty:
+                if not self.running:
+                    break
                 continue
             except Exception as e:
                 print(f"⚠️ Error extractor {worker_id}: {e}")
+                break
+        
+        print(f"✅ Extractor-{worker_id}: Terminado")
     
     def _processing_worker(self, worker_id: int):
         """Worker especializado en procesamiento intensivo con regex"""
         # Patrones locales para thread-safety
         patterns = PRECOMPILED_PATTERNS
+        start_time = time.time()
         
-        while self.running:
+        while self.running and (time.time() - start_time < 3600):  # Max 1 hora
             try:
-                batch = self.processed_queue.get(timeout=1)
+                batch = self.processed_queue.get(timeout=ULTRA_CONFIG['WORKER_TIMEOUT'])
                 if batch is None:
+                    print(f"🔄 Processor-{worker_id}: Señal de parada")
                     break
                 
                 # Procesamiento intensivo ultra-optimizado
@@ -180,16 +195,24 @@ class UltraOptimizedProcessor:
                         continue  # Skip artículos problemáticos sin logging
                 
                 if processed_articles:
-                    self.output_queue.put(processed_articles)
-                    self.stats['articles_processed'] += len(processed_articles)
-                    self.stats['batches_processed'] += 1
+                    try:
+                        self.output_queue.put(processed_articles, timeout=0.1)
+                        self.stats['articles_processed'] += len(processed_articles)
+                        self.stats['batches_processed'] += 1
+                    except queue.Full:
+                        print(f"⚠️ Processor-{worker_id}: Cola output llena, descartando {len(processed_articles)} artículos")
                 
                 self.processed_queue.task_done()
                 
             except queue.Empty:
+                if not self.running:
+                    break
                 continue
             except Exception as e:
                 print(f"⚠️ Error processor {worker_id}: {e}")
+                break
+        
+        print(f"✅ Processor-{worker_id}: Terminado")
     
     def _output_worker(self, worker_id: int):
         """Worker especializado en escritura ultra-rápida a disco con timeout estricto"""
@@ -342,17 +365,38 @@ class UltraOptimizedProcessor:
             except Exception as e:
                 print(f"⚠️ {name} pool error: {e}")
         
-        # 4. Verificación rápida de threads
+        # 4. Verificación rápida de threads con timeout forzado
         import threading
-        active_count = threading.active_count()
-        print(f"🧵 Threads activos: {active_count}")
+        start_wait = time.time()
+        
+        while time.time() - start_wait < ULTRA_CONFIG['FORCE_EXIT_TIMEOUT']:
+            active_count = threading.active_count()
+            
+            if active_count <= 10:  # Solo threads del sistema
+                print(f"✅ Workers terminados limpiamente ({active_count} threads)")
+                break
+            
+            time.sleep(0.5)
+        
+        elapsed = time.time() - start_wait
+        if elapsed >= ULTRA_CONFIG['FORCE_EXIT_TIMEOUT']:
+            print(f"🚨 TIMEOUT ALCANZADO - Forzando terminación después de {elapsed:.1f}s")
+            
+            # Matar pools agresivamente
+            for name, pool in pools:
+                try:
+                    pool._threads.clear()  # Forzar limpieza de threads
+                except:
+                    pass
+        
+        final_active = threading.active_count()
+        print(f"🧵 Threads finales: {final_active}")
         
         # 5. Forzar garbage collection
         import gc
         gc.collect()
         
-        print(f"✅ DETENCIÓN ULTRA-AGRESIVA COMPLETADA")
-        print(f"🚨 NOTA: Algunos threads pueden seguir activos pero el proceso principal continuará")
+        print(f"✅ DETENCIÓN COMPLETADA en {elapsed:.1f}s")
     
     def get_stats(self):
         """Obtiene estadísticas actuales"""
@@ -497,34 +541,28 @@ class UltraFastXMLHandler(xml.sax.ContentHandler):
             print(f"⚠️ Cola output cerca del límite: {output_queue_size}/{max_queue_size}")
     
     def finalize_processing(self):
-        """Finaliza el procesamiento con detección automática y timeout inteligente"""
-        print(f"🔄 INICIANDO FINALIZACIÓN INTELIGENTE...")
+        """Finaliza el procesamiento con timeout estricto"""
+        print(f"🔄 INICIANDO FINALIZACIÓN CON TIMEOUT...")
         
-        # 1. Verificar si XML terminó correctamente
-        if self.xml_finished:
-            print(f"✅ XML completado correctamente")
-        else:
-            print(f"⚠️ XML no completado - posible interrupción")
-            
-            # Enviar último batch si existe
-            if self.page_batch:
-                print(f"📦 Último batch: {len(self.page_batch)} páginas")
-                try:
-                    self.processor.raw_batch_queue.put(self.page_batch.copy(), timeout=1.0)
-                    print(f"✅ Último batch enviado")
-                except:
-                    print(f"⚠️ Último batch descartado por timeout")
-                self.page_batch.clear()
+        # 1. Enviar último batch si existe
+        if self.page_batch:
+            print(f"📦 Último batch: {len(self.page_batch)} páginas")
+            try:
+                self.processor.raw_batch_queue.put(self.page_batch.copy(), timeout=2.0)
+                print(f"✅ Último batch enviado")
+            except:
+                print(f"⚠️ Último batch descartado por timeout")
+            self.page_batch.clear()
         
-        # 2. Esperar con timeout adaptativo basado en el volumen
-        expected_time = max(5, min(30, self.total_batches_sent // 10))  # 5-30 segundos según volumen
-        print(f"⏳ Esperando finalización (máximo {expected_time} segundos basado en volumen)...")
+        # 2. Esperar con timeout muy agresivo
+        max_wait = ULTRA_CONFIG['MAX_FINALIZATION_TIME']
+        print(f"⏳ Esperando finalización (máximo {max_wait}s)...")
         
         start_wait = time.time()
         last_articles = self.processor.get_stats()['articles_processed']
-        stable_count = 0  # Contador de estabilidad
+        stable_count = 0
         
-        while time.time() - start_wait < expected_time:
+        while time.time() - start_wait < max_wait:
             time.sleep(1)
             current_stats = self.processor.get_stats()
             current_articles = current_stats['articles_processed']
@@ -544,18 +582,18 @@ class UltraFastXMLHandler(xml.sax.ContentHandler):
                 stable_count = 0
                 last_articles = current_articles
             
-            # Condiciones de finalización
-            if raw_size == 0 and proc_size == 0 and out_size == 0:
-                if stable_count >= 2:  # 2 segundos estable con colas vacías
-                    print(f"✅ Procesamiento completado (colas vacías + estable)")
-                    break
-            elif stable_count >= 5:  # 5 segundos sin cambios
-                print(f"✅ Procesamiento estabilizado (sin nuevos artículos)")
+            # Condiciones de finalización más agresivas
+            if raw_size == 0 and proc_size == 0 and out_size == 0 and stable_count >= 2:
+                print(f"✅ Procesamiento completado (colas vacías)")
+                break
+            elif stable_count >= 3:  # Solo 3 segundos de estabilidad
+                print(f"✅ Procesamiento estabilizado")
                 break
         
-        # 3. Finalización
+        # 3. Finalización forzada
         elapsed_total = time.time() - start_wait
-        print(f"🛑 Finalización después de {elapsed_total:.1f}s")
+        if elapsed_total >= max_wait:
+            print(f"� TIMEOUT DE FINALIZACIÓN ({elapsed_total:.1f}s) - Continuando con terminación")
         
         # Estadísticas finales
         final_stats = self.processor.get_stats()
@@ -565,9 +603,9 @@ class UltraFastXMLHandler(xml.sax.ContentHandler):
         print(f"   📚 Artículos procesados: {final_stats['articles_processed']:,}")
         print(f"   💾 Archivos escritos: {final_stats['batches_written']:,}")
         
-        # Forzar detención inmediata
+        # Marcar workers para detención
         self.processor.running = False
-        print(f"🚨 Workers marcados para detención")
+        print(f"� Workers marcados para detención")
 
 def setup_system_for_ultra_performance():
     """Configura el sistema para máximo rendimiento"""
@@ -634,11 +672,22 @@ def main():
         # Crear handler SAX ultra-rápido
         handler = UltraFastXMLHandler(processor)
         
-        # Manejo de señales
+        # Manejo de señales con terminación forzada
         def signal_handler(signum, frame):
-            print(f"\n⚠️ Señal recibida, finalizando...")
+            print(f"\n⚠️ Señal {signum} recibida, terminando INMEDIATAMENTE...")
+            processor.running = False
             processor.stop_workers()
-            sys.exit(0)
+            
+            # Esperar máximo 5 segundos
+            cleanup_start = time.time()
+            while time.time() - cleanup_start < 5:
+                import threading
+                if threading.active_count() <= 5:
+                    break
+                time.sleep(0.5)
+            
+            print(f"🚨 TERMINACIÓN FORZADA POR SEÑAL")
+            os._exit(1)  # Salida inmediata
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -688,20 +737,43 @@ def main():
             print(f"📈 MEJORA CONSEGUIDA: {improvement:.1f}x más rápido")
             print(f"📊 Progreso hacia objetivo: {(pages_rate / ULTRA_CONFIG['TARGET_SPEED']) * 100:.1f}%")
         
-        # Verificación final de finalización limpia
+        # Verificación final de finalización limpia con timeout forzado
         import threading
         active_threads = threading.active_count()
         if active_threads <= 5:  # Main + threads del sistema
             print(f"✅ FINALIZACIÓN LIMPIA - {active_threads} threads activos")
         else:
             print(f"⚠️ FINALIZACIÓN PARCIAL - {active_threads} threads aún activos")
-            print(f"🚨 El proceso debería terminar automáticamente en unos segundos")
+            print(f"🚨 Esperando {ULTRA_CONFIG['FORCE_EXIT_TIMEOUT']}s adicionales para limpieza...")
+            
+            # Esperar limpieza final con timeout
+            cleanup_start = time.time()
+            while time.time() - cleanup_start < ULTRA_CONFIG['FORCE_EXIT_TIMEOUT']:
+                current_threads = threading.active_count()
+                if current_threads <= 5:
+                    print(f"✅ LIMPIEZA COMPLETADA - {current_threads} threads")
+                    break
+                time.sleep(1)
+            
+            # Si aún hay threads activos, forzar salida
+            final_threads = threading.active_count()
+            if final_threads > 5:
+                print(f"🚨 FORZANDO SALIDA - {final_threads} threads persistentes")
+                print(f"🛑 El proceso terminará inmediatamente")
+                
+                # Garbage collection final agresivo
+                import gc
+                gc.collect()
+                
+                # Forzar salida del proceso
+                print(f"🚀 PROCESO TERMINANDO FORZADAMENTE...")
+                os._exit(0)  # Salida forzada sin cleanup adicional
         
         # Forzar garbage collection final
         import gc
         gc.collect()
         
-        print(f"🎯 PROCESO PRINCIPAL TERMINANDO...")
+        print(f"🎯 PROCESO PRINCIPAL TERMINANDO LIMPIAMENTE...")
         return 0
         
     except KeyboardInterrupt:
