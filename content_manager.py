@@ -9,6 +9,7 @@ CARACTERÍSTICAS:
 - Categorización inteligente ultra-rápida
 - Generación masiva de conversaciones  
 - Arquitectura thread-safe sin locks explícitos
+- Sistema de categorías limitado a 100 máximo
 - Optimizado para GH200 (450GB RAM)
 """
 
@@ -43,7 +44,6 @@ class IntelligentCategorizer:
                     r'\b(?:álbum|disco|canción|single)\b',
                     r'\b(?:banda|grupo musical|cantante|músico)\b',
                     r'\b(?:reggae|rock|pop|jazz|clásica|folk)\b',
-                    r'\b(?:Bob Marley|The Wailers|Island Records)\b',  # Específico para Catch a Fire
                     r'\b(?:pintor|escultor|artista|galería|museo)\b'
                 ],
                 'weight': 10
@@ -136,33 +136,21 @@ class IntelligentCategorizer:
             }
         }
         
-        # REGLAS ESPECÍFICAS ULTRA-RÁPIDAS
-        self.specific_rules = {
-            'catch_a_fire': {
-                'pattern': r'Catch a Fire.*(?:álbum|Bob Marley|reggae)',
-                'force_category': 'arte',
-                'subcategory': 'musica-reggae',
-                'confidence': 0.95
-            },
-            'albums_music': {
-                'pattern': r'(?:álbum|disco).*(?:banda|grupo|cantante)',
-                'force_category': 'arte', 
-                'subcategory': 'musica-albums',
-                'confidence': 0.90
-            },
-            'geographic_places': {
-                'pattern': r'es una (?:ciudad|provincia|región|país)',
-                'force_category': 'geografia',
-                'subcategory': 'lugares',
-                'confidence': 0.85
-            },
-            'biographical': {
-                'pattern': r'(?:nació|nacido).*(?:fue un|fue una).*(?:murió|fallecido)',
-                'force_category': 'historia',
-                'subcategory': 'biografias',
-                'confidence': 0.88
-            }
-        }
+        # PATRONES MUSICALES Y ARTÍSTICOS ESPECÍFICOS
+        self.music_patterns = [
+            r'\b(?:álbum|disco)\b.*\b(?:de|por)\b.*\b(?:banda|grupo|cantante|artista)\b',
+            r'\b(?:banda|grupo)\b.*\b(?:álbum|disco|canción)\b',
+            r'\b(?:single|sencillo)\b.*\b(?:de|por)\b',
+            r'\b(?:reggae|rock|pop|jazz|blues|folk|metal|punk|electronic)\b.*\b(?:álbum|banda|artista)\b',
+            r'\b(?:compositor|músico|cantante)\b.*\b(?:conocido|famoso)\b'
+        ]
+        
+        # PATRONES ARTÍSTICOS GENERALES
+        self.art_patterns = [
+            r'\b(?:pintor|escultor|artista)\b.*\b(?:conocido|famoso|creó|pintó)\b',
+            r'\b(?:obra|pintura|escultura)\b.*\b(?:de|por)\b.*\b(?:artista|pintor)\b',
+            r'\b(?:estilo|movimiento)\b.*\b(?:artístico|pictórico)\b'
+        ]
         
     def setup_conversation_templates(self):
         """Plantillas optimizadas para generación rápida de conversaciones"""
@@ -241,11 +229,16 @@ class IntelligentCategorizer:
         """
         text = f"{title} {content}".lower()
         
-        # 1. VERIFICAR REGLAS ESPECÍFICAS PRIMERO (más rápido)
-        for rule in self.specific_rules.values():
-            if re.search(rule['pattern'], text, re.IGNORECASE):
-                subcategory = self.identify_subcategory_fast(rule['force_category'], text)
-                return rule['force_category'], subcategory, rule['confidence']
+        # 1. VERIFICAR PATRONES MUSICALES Y ARTÍSTICOS PRIMERO
+        for pattern in self.music_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                subcategory = self.identify_subcategory_fast('arte', text)
+                return 'arte', subcategory, 0.90
+                
+        for pattern in self.art_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                subcategory = self.identify_subcategory_fast('arte', text)
+                return 'arte', subcategory, 0.85
         
         # 2. SCORING RÁPIDO POR CATEGORÍA
         best_category = 'general'
@@ -364,18 +357,152 @@ class IntelligentCategorizer:
             return 'general'
 
 
+class CategoryManager:
+    """Gestor de categorías con límite de 100 carpetas máximo"""
+    
+    def __init__(self, max_categories: int = 100):
+        self.max_categories = max_categories
+        self.category_counts = defaultdict(int)
+        self.subcategory_counts = defaultdict(lambda: defaultdict(int))
+        self.final_categories = {}
+        self.generic_categories = {}
+        self.finalized = False
+        self.total_articles = 0
+        
+    def register_category(self, category: str, subcategory: str = 'general'):
+        """Registra una categoría encontrada durante el procesamiento"""
+        if self.finalized:
+            return self.get_final_category(category, subcategory)
+            
+        self.category_counts[category] += 1
+        self.subcategory_counts[category][subcategory] += 1
+        self.total_articles += 1
+        
+        # Crear nombre de categoría combinada
+        return f"{category}-{subcategory}" if subcategory != 'general' else category
+    
+    def finalize_categories(self):
+        """Finaliza las categorías limitándolas a máximo 100"""
+        if self.finalized:
+            return
+            
+        print(f"🏷️ FINALIZANDO CATEGORÍAS: {len(self.category_counts)} categorías principales encontradas")
+        print(f"📊 Total de artículos procesados: {self.total_articles:,}")
+        
+        # 1. Crear lista ordenada de todas las combinaciones categoría-subcategoría
+        all_combinations = []
+        
+        for category, count in self.category_counts.items():
+            for subcategory, sub_count in self.subcategory_counts[category].items():
+                combination_name = f"{category}-{subcategory}" if subcategory != 'general' else category
+                all_combinations.append({
+                    'name': combination_name,
+                    'category': category,
+                    'subcategory': subcategory,
+                    'count': sub_count,
+                    'category_total': count,
+                    'percentage': (sub_count / self.total_articles) * 100 if self.total_articles > 0 else 0
+                })
+        
+        # 2. Ordenar por cantidad (descendente)
+        all_combinations.sort(key=lambda x: x['count'], reverse=True)
+        
+        print(f"📈 Top 10 categorías más populares:")
+        for i, combo in enumerate(all_combinations[:10]):
+            print(f"   {i+1:2d}. {combo['name']}: {combo['count']:,} artículos ({combo['percentage']:.1f}%)")
+        
+        # 3. Seleccionar las top 90 (dejando 10% para genérico)
+        top_90 = all_combinations[:90]
+        
+        # 4. Crear las categorías finales
+        for combo in top_90:
+            self.final_categories[combo['name']] = combo['name']
+            
+        # 5. Crear categorías genéricas para las principales no incluidas
+        remaining_categories = {}
+        for combo in all_combinations[90:]:
+            main_cat = combo['category']
+            if main_cat not in remaining_categories:
+                remaining_categories[main_cat] = 0
+            remaining_categories[main_cat] += combo['count']
+        
+        # Ordenar categorías restantes por cantidad
+        sorted_remaining = sorted(remaining_categories.items(), key=lambda x: x[1], reverse=True)
+        
+        # 6. Agregar 'generico' como primera categoría genérica
+        self.final_categories['generico'] = 'generico'
+        generic_used = 1
+        
+        # 7. Agregar generico-{categoria} para las 8 más populares restantes
+        for main_cat, count in sorted_remaining[:8]:
+            if generic_used < 10:  # Máximo 10 categorías genéricas
+                generic_name = f"generico-{main_cat}"
+                self.final_categories[generic_name] = generic_name
+                self.generic_categories[main_cat] = generic_name
+                generic_used += 1
+        
+        # 8. Última categoría genérica para overflow
+        if generic_used < 10:
+            self.final_categories['generico-otros'] = 'generico-otros'
+            generic_used += 1
+        
+        print(f"✅ CATEGORÍAS FINALIZADAS: {len(self.final_categories)} categorías")
+        print(f"   📊 Específicas: {len(top_90)}")
+        print(f"   🗂️ Genéricas: {generic_used}")
+        print(f"   📋 Categorías genéricas: {list(self.generic_categories.keys())}")
+        
+        self.finalized = True
+        
+    def get_final_category(self, category: str, subcategory: str = 'general') -> str:
+        """Obtiene la categoría final después de la finalización"""
+        if not self.finalized:
+            return self.register_category(category, subcategory)
+            
+        # Intentar encontrar la combinación exacta
+        combination_name = f"{category}-{subcategory}" if subcategory != 'general' else category
+        
+        if combination_name in self.final_categories:
+            return self.final_categories[combination_name]
+            
+        # Si la categoría principal tiene una versión genérica
+        if category in self.generic_categories:
+            return self.generic_categories[category]
+            
+        # Fallback a genérico
+        return 'generico'
+    
+    def get_category_stats(self) -> Dict:
+        """Estadísticas de las categorías"""
+        if not self.finalized:
+            return {
+                'status': 'not_finalized',
+                'categories_found': len(self.category_counts),
+                'total_articles': self.total_articles
+            }
+            
+        return {
+            'status': 'finalized',
+            'total_categories_found': len(self.category_counts),
+            'final_categories_count': len(self.final_categories),
+            'total_articles': self.total_articles,
+            'most_popular': dict(sorted(self.category_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
+            'final_categories': list(self.final_categories.keys()),
+            'generic_categories': self.generic_categories
+        }
+
+
 class ContentManager:
     """Gestor de contenido principal optimizado para máximo throughput"""
     
-    def __init__(self):
+    def __init__(self, use_category_manager: bool = True):
         self.categorizer = IntelligentCategorizer()
+        self.category_manager = CategoryManager() if use_category_manager else None
         self.stats = {
             'articles_processed': 0,
             'conversations_generated': 0,
             'categorization_time': 0,
             'conversation_time': 0
         }
-        """Procesa un artículo completo de forma ultra-rápida"""
         
     def process_article(self, article: Dict) -> Optional[Dict]:
         """
@@ -392,6 +519,11 @@ class ContentManager:
             # Categorización ultra-rápida
             category, subcategory, confidence = self.categorizer.categorize_article_fast(title, content)
             
+            # Registrar en CategoryManager si está habilitado
+            final_category = category
+            if self.category_manager:
+                final_category = self.category_manager.register_category(category, subcategory)
+            
             # Generación rápida de conversaciones
             conversations = self.categorizer.generate_conversations_fast(title, content, category, subcategory)
             
@@ -400,6 +532,7 @@ class ContentManager:
                 'title': title,
                 'category': category,
                 'subcategory': subcategory,
+                'final_category': final_category,  # Para usar en la escritura de archivos
                 'confidence': confidence,
                 'conversations': conversations,
                 'metadata': {
@@ -428,6 +561,17 @@ class ContentManager:
                 
         return results
     
+    def finalize_categories(self):
+        """Finaliza las categorías si se está usando CategoryManager"""
+        if self.category_manager:
+            self.category_manager.finalize_categories()
+    
+    def get_final_category(self, category: str, subcategory: str = 'general') -> str:
+        """Obtiene la categoría final para un artículo"""
+        if self.category_manager:
+            return self.category_manager.get_final_category(category, subcategory)
+        return f"{category}-{subcategory}" if subcategory != 'general' else category
+    
     def get_categories(self) -> List[str]:
         """Lista de categorías disponibles"""
         return ['arte', 'geografia', 'historia', 'ciencias', 'biologia', 'tecnologia', 
@@ -435,4 +579,7 @@ class ContentManager:
     
     def get_stats(self) -> Dict:
         """Estadísticas del procesador"""
-        return self.stats.copy()
+        stats = self.stats.copy()
+        if self.category_manager:
+            stats['category_stats'] = self.category_manager.get_category_stats()
+        return stats
