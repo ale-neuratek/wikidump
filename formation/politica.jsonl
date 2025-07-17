@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "politica", "keywords": ["gobierno", "presidente", "ministro", "político", "partido", "elección"], "patterns": ["\\b(?:presidente|ministro|gobernador)\\b", "\\b(?:partido político|gobierno)\\b"], "weight": 7}}
+{"type": "subcategory_patterns", "data": {"politicos": "(?:presidente|ministro|político)", "partidos": "(?:partido|movimiento político)", "gobiernos": "(?:gobierno|administración)", "elecciones": "(?:elección|votación|sufragio)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Quién fue {topic}?", "¿Qué cargo ocupó {topic}?", "¿Cuál fue su importancia política?"], "deep": "Analiza completamente la figura política de {topic}. Incluye trayectoria política, ideología, logros, controversias y impacto en la historia política."}}
+{"type": "category_keywords", "data": ["gobierno", "presidente", "ministro", "político", "partido", "elección"]}

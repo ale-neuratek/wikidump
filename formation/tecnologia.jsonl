@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "tecnologia", "keywords": ["computadora", "software", "internet", "tecnología", "digital", "programa"], "patterns": ["\\b(?:software|hardware|programa|aplicación)\\b", "\\b(?:internet|web|digital|tecnología)\\b"], "weight": 7}}
+{"type": "subcategory_patterns", "data": {"software": "(?:software|programa|aplicación)", "hardware": "(?:hardware|computadora|dispositivo)", "internet": "(?:internet|web|online)", "digital": "(?:digital|tecnología)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Cómo funciona {topic}?", "¿Para qué se usa {topic}?"], "deep": "Explica completamente {topic} desde el punto de vista tecnológico. Incluye principios técnicos, funcionamiento, aplicaciones, desarrollo histórico e impacto tecnológico."}}
+{"type": "category_keywords", "data": ["computadora", "software", "internet", "tecnología", "digital", "programa"]}

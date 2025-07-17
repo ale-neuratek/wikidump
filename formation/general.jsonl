@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "general", "keywords": ["general", "diversos", "varios", "otros", "misceláneo"], "patterns": [".*"], "weight": 1}}
+{"type": "subcategory_patterns", "data": {"miscelaneo": ".*", "otros": "(?:otros|varios|diversos)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Cuál es la importancia de {topic}?", "¿Cuáles son las características principales de {topic}?"], "deep": "Dame toda la información disponible sobre {topic}. Quiero conocer todos los detalles, contexto, importancia y cualquier aspecto relevante."}}
+{"type": "category_keywords", "data": ["general", "diversos", "varios", "otros"]}

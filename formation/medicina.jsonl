@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "medicina", "keywords": ["enfermedad", "tratamiento", "médico", "hospital", "salud"], "patterns": ["\\b(?:enfermedad|síntoma|tratamiento)\\b", "\\b(?:médico|doctor|hospital)\\b"], "weight": 7}}
+{"type": "subcategory_patterns", "data": {"enfermedades": "(?:enfermedad|síndrome|trastorno)", "tratamientos": "(?:tratamiento|terapia|medicamento)", "profesionales": "(?:médico|doctor|enfermero)", "instituciones": "(?:hospital|clínica|centro médico)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Cómo se trata {topic}?", "¿Cuáles son los síntomas de {topic}?"], "deep": "Proporciona información médica completa sobre {topic}. Incluye definición, causas, síntomas, diagnóstico, tratamiento y pronóstico."}}
+{"type": "category_keywords", "data": ["enfermedad", "tratamiento", "médico", "hospital", "salud"]}

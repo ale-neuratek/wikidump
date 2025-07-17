@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "geografia", "keywords": ["país", "ciudad", "región", "provincia", "municipio", "capital", "territorio"], "patterns": ["\\b(?:ciudad|pueblo|municipio|localidad)\\b", "\\b(?:provincia|región|departamento|estado)\\b", "\\b(?:país|nación|república|reino)\\b", "\\bes una (?:ciudad|provincia|región|país)\\b"], "weight": 8}}
+{"type": "subcategory_patterns", "data": {"paises": "(?:país|nación)", "ciudades": "(?:ciudad|municipio)", "regiones": "(?:región|provincia)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Dónde está {topic}?", "¿Cuántos habitantes tiene {topic}?", "¿Cuáles son sus características?"], "deep": "Describe completamente {topic} desde todos los aspectos geográficos. Incluye ubicación, demografía, geografía física, economía, historia y características culturales."}}
+{"type": "category_keywords", "data": ["ciudad", "país", "región", "provincia", "territorio"]}

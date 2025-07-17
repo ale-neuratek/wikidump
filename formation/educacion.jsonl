@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "educacion", "keywords": ["universidad", "colegio", "escuela", "educación", "enseñanza"], "patterns": ["\\b(?:universidad|colegio|escuela)\\b", "\\b(?:educación|enseñanza)\\b"], "weight": 6}}
+{"type": "subcategory_patterns", "data": {"universidades": "(?:universidad|instituto superior)", "colegios": "(?:colegio|escuela|liceo)", "metodologia": "(?:metodología|pedagogía|didáctica)", "profesores": "(?:profesor|maestro|educador)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Dónde se enseña {topic}?", "¿Para qué sirve {topic}?"], "deep": "Explica completamente {topic} desde el punto de vista educativo. Incluye metodología, objetivos, aplicaciones y relevancia en el sistema educativo."}}
+{"type": "category_keywords", "data": ["universidad", "colegio", "escuela", "educación", "enseñanza"]}

@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "economia", "keywords": ["empresa", "mercado", "economía", "negocio", "comercio"], "patterns": ["\\b(?:empresa|corporación)\\b", "\\b(?:mercado|economía)\\b"], "weight": 6}}
+{"type": "subcategory_patterns", "data": {"empresas": "(?:empresa|corporación|compañía)", "mercados": "(?:mercado|bolsa|trading)", "finanzas": "(?:finanzas|banca|inversión)", "comercio": "(?:comercio|negocio|industria)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Cómo funciona {topic}?", "¿Cuál es su importancia económica?"], "deep": "Explica completamente {topic} desde el punto de vista económico. Incluye principios económicos, funcionamiento, impacto en mercados y relevancia actual."}}
+{"type": "category_keywords", "data": ["empresa", "mercado", "economía", "negocio", "comercio"]}

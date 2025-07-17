@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "deportes", "keywords": ["fútbol", "equipo", "club", "deportivo", "liga", "campeonato"], "patterns": ["\\b(?:club|equipo) (?:de fútbol|deportivo)\\b", "\\b(?:liga|campeonato|torneo)\\b"], "weight": 8}}
+{"type": "subcategory_patterns", "data": {"futbol": "(?:fútbol|soccer)", "equipos": "(?:equipo|club)", "competiciones": "(?:liga|campeonato|torneo)", "deportistas": "(?:jugador|atleta|deportista)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué es {topic}?", "¿Dónde se practica {topic}?", "¿Cuáles son las reglas de {topic}?"], "deep": "Describe completamente {topic} desde todos los aspectos deportivos. Incluye historia, reglas, técnicas, competiciones importantes y figuras destacadas."}}
+{"type": "category_keywords", "data": ["fútbol", "equipo", "club", "deportivo", "liga", "campeonato"]}

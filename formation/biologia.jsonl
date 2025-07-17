@@ -1,0 +1,4 @@
+{"type": "category_config", "data": {"name": "biologia", "keywords": ["especie", "género", "familia", "animal", "planta", "mamífero", "ave"], "patterns": ["\\b(?:especie|género|familia) de\\b", "\\b[A-Z][a-z]+ [a-z]+\\b.*\\b(?:especie|animal|planta)\\b", "\\b(?:mamífero|ave|pez|reptil|insecto)\\b"], "weight": 8}}
+{"type": "subcategory_patterns", "data": {"animales": "(?:animal|mamífero|ave|pez)", "plantas": "(?:planta|flora|vegetal)", "taxonomia": "(?:especie|género|familia)", "ecosistemas": "(?:ecosistema|hábitat|biodiversidad)"}}
+{"type": "conversation_templates", "data": {"basic": ["¿Qué tipo de ser vivo es {topic}?", "¿Dónde vive {topic}?", "¿Cómo se comporta {topic}?"], "deep": "Dame información biológica completa sobre {topic}. Incluye taxonomía, anatomía, fisiología, comportamiento, ecología, evolución y relación con otros organismos."}}
+{"type": "category_keywords", "data": ["especie", "género", "familia", "animal", "planta", "mamífero", "ave"]}
