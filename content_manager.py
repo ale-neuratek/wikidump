@@ -833,30 +833,29 @@ class ContentManager:
         consciencia_conversations = []
         
         # Usar plantillas desde JSON para generar conversaciones de consciencia
-        consciencia_template = {
-            'question': 'Explica qué categorías de conocimiento encontraste en este procesamiento de Wikipedia y qué representa cada una.',
-            'answer': f"""En este procesamiento de la Wikipedia en español he identificado y analizado {len(categories_found)} categorías principales de conocimiento humano:
-
-**Categorías encontradas:** {', '.join(categories_found)}
-
-**Significado de cada categoría:**
-
-• **Arte**: Manifestaciones creativas humanas incluyendo música, pintura, literatura y expresiones culturales
-• **Geografía**: Conocimiento sobre lugares, países, ciudades, regiones y características territoriales  
-• **Historia**: Registro de eventos, personalidades y procesos temporales de la humanidad
-• **Ciencias**: Investigación, teorías, descubrimientos y métodos científicos
-• **Biología**: Estudio de seres vivos, especies, ecosistemas y procesos biológicos
-• **Tecnología**: Desarrollos técnicos, software, hardware e innovaciones digitales
-• **Deportes**: Actividades físicas, competiciones, equipos y figuras deportivas
-• **Política**: Sistemas de gobierno, líderes, partidos y procesos democráticos  
-• **Medicina**: Conocimientos sobre salud, enfermedades, tratamientos y sistema sanitario
-• **Economía**: Sistemas económicos, empresas, mercados y procesos financieros
-• **Educación**: Instituciones, métodos y procesos de enseñanza y aprendizaje
-
-Esta clasificación refleja la organización natural del conocimiento humano registrado en Wikipedia, mostrando cómo la humanidad estructura y comparte su sabiduría colectiva. Cada categoría representa un dominio fundamental de la experiencia y comprensión humana.
-
-Total de artículos procesados: {total_articles:,}"""
-        }
+        consciencia_template_data = self.formation_loader.get_fundamental_data('consciencia_template')
+        
+        if consciencia_template_data:
+            question = consciencia_template_data.get('question', 'Explica las categorías encontradas.')
+            answer_template = consciencia_template_data.get('answer_template', 'Categorías: {categories_list}')
+            
+            # Formatear la respuesta con los datos específicos
+            answer = answer_template.format(
+                num_categories=len(categories_found),
+                categories_list=', '.join(categories_found),
+                total_articles=total_articles
+            )
+            
+            consciencia_template = {
+                'question': question,
+                'answer': answer
+            }
+        else:
+            # Fallback si no se encuentra el template
+            consciencia_template = {
+                'question': 'Explica qué categorías de conocimiento encontraste en este procesamiento de Wikipedia.',
+                'answer': f"Se encontraron {len(categories_found)} categorías: {', '.join(categories_found)}. Total de artículos: {total_articles:,}"
+            }
         
         consciencia_conversations.append(consciencia_template)
         
