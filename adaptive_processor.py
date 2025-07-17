@@ -22,7 +22,12 @@ from hardware_configs import get_hardware_config, optimize_for_queue_issues, dia
 class AdaptiveProcessor:
     """Procesador adaptativo que optimiza automáticamente según el dataset"""
     
-    def __init__(self):
+    def __init__(self, formation_dir: str = "formation", questions_per_article: int = 10, 
+                 fundamental_questions: int = 5, specific_questions: int = 5):
+        self.formation_dir = formation_dir  # Almacenar directorio de formación
+        self.questions_per_article = questions_per_article  # NUEVO: parámetro de preguntas
+        self.fundamental_questions = fundamental_questions  # NUEVO: preguntas fundamentales
+        self.specific_questions = specific_questions        # NUEVO: preguntas específicas
         self.start_time = time.time()
         self.log_file = "adaptive_processing.log"
         self.log_interval = 1 * 60  # 1 minuto para más seguimiento
@@ -207,6 +212,12 @@ class AdaptiveProcessor:
         self.log("🚀 INICIANDO PROCESAMIENTO PRINCIPAL", force=True)
         
         try:
+            # Asegurar que el directorio actual está en el path
+            import sys
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.insert(0, current_dir)
+            
             from simple_processor import MassiveParallelDatasetProcessor
             
             # Crear configuración adaptativa para el procesador
@@ -287,7 +298,15 @@ class AdaptiveProcessor:
         try:
             # Importar content_manager y delegarle la responsabilidad
             from content_manager import ContentManager
-            content_manager = ContentManager()
+            # Usar formation_training si está disponible, sino formation por defecto
+            formation_dir = getattr(self, 'formation_dir', 'formation')
+            
+            # NUEVO: Pasar parámetros de preguntas al ContentManager
+            content_manager = ContentManager(
+                formation_dir=formation_dir, 
+                fundamental_questions=self.fundamental_questions,
+                specific_questions=self.specific_questions
+            )
             
             # Generar categoría consciencia con identificación temporal mejorada
             result = content_manager.generate_consciencia_category(categories_found, output_dir, total_articles)
@@ -297,6 +316,20 @@ class AdaptiveProcessor:
             self.log(f"   📁 {result['total_files']} archivos JSONL creados", force=True)
             self.log(f"   🏷️ {result['categories_described']} categorías descritas", force=True)
             self.log(f"   🕒 Con identificación temporal mejorada (es/fue)", force=True)
+            self.log(f"   ❓ Usando {self.questions_per_article} preguntas por artículo", force=True)
+            self.log(f"   📋 Fundamentales: {self.fundamental_questions} (umbral 0.9)", force=True)
+            self.log(f"   🎯 Específicas: {self.specific_questions} (umbral 0.7)", force=True)
+            
+            # NUEVO: Guardar conversaciones de baja calidad
+            try:
+                low_quality_dir = content_manager.save_low_quality_conversations()
+                if low_quality_dir:
+                    self.log(f"📉 Low quality guardado en: {low_quality_dir}", force=True)
+                    low_quality_stats = content_manager.stats
+                    self.log(f"   📊 Fundamentales low quality: {low_quality_stats.get('low_quality_fundamental', 0)}", force=True)
+                    self.log(f"   📊 Específicas low quality: {low_quality_stats.get('low_quality_specific', 0)}", force=True)
+            except Exception as low_quality_error:
+                self.log(f"⚠️ Error guardando low quality: {low_quality_error}", force=True)
             
         except Exception as e:
             self.log(f"❌ ERROR generando consciencia: {str(e)}", force=True)
@@ -305,22 +338,42 @@ class AdaptiveProcessor:
 
 def main():
     """Función principal para usar el procesador adaptativo"""
-    if len(sys.argv) != 3:
-        print("Uso: python adaptive_processor.py <directorio_input> <directorio_output>")
-        print("Ejemplo: python adaptive_processor.py data_test_small wiki_conversations_adaptive")
-        sys.exit(1)
+    import argparse
     
-    input_dir = sys.argv[1]
-    output_dir = sys.argv[2]
+    parser = argparse.ArgumentParser(description='Procesador adaptativo de datasets')
+    parser.add_argument('input_dir', help='Directorio de entrada con archivos JSON/JSONL')
+    parser.add_argument('output_dir', help='Directorio de salida para conversaciones')
+    parser.add_argument('--questions-per-article', type=int, default=10, 
+                       help='Número total de preguntas por artículo (default: 10)')
+    parser.add_argument('--fundamental-questions', type=int, default=5,
+                       help='Número de preguntas fundamentales (default: 5, umbral 0.9)')
+    parser.add_argument('--specific-questions', type=int, default=5,
+                       help='Número de preguntas específicas (default: 5, umbral 0.7)')
+    
+    args = parser.parse_args()
+    
+    # Validar que la suma de preguntas sea coherente
+    total_expected = args.fundamental_questions + args.specific_questions
+    if args.questions_per_article != total_expected:
+        print(f"⚠️ Ajustando: total {args.questions_per_article} → {total_expected} (fundamental + específicas)")
+        args.questions_per_article = total_expected
     
     print("🧠 ADAPTIVE DATASET PROCESSOR")
     print("=" * 50)
-    print(f"📁 Input: {input_dir}")
-    print(f"📁 Output: {output_dir}")
+    print(f"📁 Input: {args.input_dir}")
+    print(f"📁 Output: {args.output_dir}")
+    print(f"❓ Total preguntas por artículo: {args.questions_per_article}")
+    print(f"📋 Preguntas fundamentales: {args.fundamental_questions} (umbral: 0.9)")
+    print(f"🎯 Preguntas específicas: {args.specific_questions} (umbral: 0.7)")
     print("=" * 50)
     
-    processor = AdaptiveProcessor()
-    result = processor.process_dataset(input_dir, output_dir)
+    processor = AdaptiveProcessor(
+        questions_per_article=args.questions_per_article,
+        fundamental_questions=args.fundamental_questions,
+        specific_questions=args.specific_questions
+    )
+    
+    result = processor.process_dataset(args.input_dir, args.output_dir)
     
     if result['success']:
         print("\n🎉 PROCESAMIENTO COMPLETADO EXITOSAMENTE")

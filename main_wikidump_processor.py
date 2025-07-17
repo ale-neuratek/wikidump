@@ -33,17 +33,32 @@ from hardware_configs import get_hardware_config, print_hardware_info, detect_ha
 class WikidumpMainProcessor:
     """Procesador principal del pipeline completo de Wikidump"""
     
-    def __init__(self, xml_path: str, output_dir: str = "wiki_conversations_complete", skip_stage1: bool = False):
-        self.xml_path = Path(xml_path)
+    def __init__(self, xml_path: str = None, jsonl_dir: str = None, output_dir: str = "wiki_conversations_complete", 
+                 skip_stage1: bool = False, questions_per_category: int = 10):
+        # Validar inputs exclusivos
+        if xml_path and jsonl_dir:
+            raise ValueError("No se puede especificar tanto xml_path como jsonl_dir")
+        if not xml_path and not jsonl_dir:
+            # Default a data_test_ultra_hybrid si no se especifica nada
+            jsonl_dir = "data_test_ultra_hybrid"
+            skip_stage1 = True
+        
+        self.xml_path = Path(xml_path) if xml_path else None
+        self.jsonl_dir = Path(jsonl_dir) if jsonl_dir else None
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
+        # Configuración de preguntas por categoría
+        self.questions_per_category = questions_per_category
+        self.base_questions_count = min(5, questions_per_category)  # 3-5 preguntas base
+        self.specific_questions_count = questions_per_category - self.base_questions_count
+        
         # Rutas para cada etapa
-        self.stage1_output = Path("data_ultra_hybrid")
+        self.stage1_output = self.jsonl_dir if self.jsonl_dir else Path("data_ultra_hybrid")
         self.stage2_output = self.output_dir
         
         # Estado del pipeline
-        self.skip_stage1 = skip_stage1
+        self.skip_stage1 = skip_stage1 or (self.jsonl_dir is not None)
         self.hardware_type = detect_hardware()
         self.hardware_config = get_hardware_config()
         
@@ -73,7 +88,10 @@ class WikidumpMainProcessor:
         print_hardware_info()
         
         print(f"\n📁 CONFIGURACIÓN DEL PIPELINE:")
-        print(f"   📄 XML Input: {self.xml_path} ({self.xml_path.stat().st_size / (1024**3):.1f}GB)")
+        if self.xml_path:
+            print(f"   📄 XML Input: {self.xml_path} ({self.xml_path.stat().st_size / (1024**3):.1f}GB)")
+        if self.jsonl_dir:
+            print(f"   📂 JSONL Input Directory: {self.jsonl_dir}")
         print(f"   📂 Stage 1 Output: {self.stage1_output}")
         print(f"   📂 Stage 2 Output: {self.stage2_output}")
         print(f"   ⏭️  Skip Stage 1: {'Sí' if self.skip_stage1 else 'No'}")
@@ -83,6 +101,11 @@ class WikidumpMainProcessor:
         print(f"   📦 Batch Size: {self.hardware_config['BATCH_SIZE']:,}")
         print(f"   🎯 Target Speed: {self.hardware_config['TARGET_SPEED']:,} páginas/segundo")
         print(f"   💾 Memory Buffer: {self.hardware_config['MEMORY_BUFFER_GB']}GB")
+        
+        print(f"\n❓ CONFIGURACIÓN DE PREGUNTAS:")
+        print(f"   📊 Preguntas por categoría: {self.questions_per_category}")
+        print(f"   📋 Preguntas base: {self.base_questions_count}")
+        print(f"   🎯 Preguntas específicas: {self.specific_questions_count}")
         
         print("="*80)
         
@@ -138,15 +161,17 @@ class WikidumpMainProcessor:
         start_time = time.time()
         
         try:
-            # Ejecutar adaptive_processor.py
+            # Ejecutar adaptive_processor.py con parámetro de preguntas
             cmd = [
                 sys.executable,
                 "adaptive_processor.py",
                 str(self.stage1_output),
-                str(self.stage2_output)
+                str(self.stage2_output),
+                "--questions-per-article", str(self.questions_per_category)
             ]
             
             print(f"📋 Ejecutando: {' '.join(cmd)}")
+            print(f"📊 Preguntas por artículo: {self.questions_per_category} (Base: {self.base_questions_count}, Específicas: {self.specific_questions_count})")
             
             # Crear proceso para capturar salida en tiempo real
             process = subprocess.Popen(
@@ -155,6 +180,8 @@ class WikidumpMainProcessor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
+                encoding='utf-8',
+                errors='replace',  # Reemplazar caracteres inválidos
                 bufsize=1
             )
             
@@ -311,18 +338,27 @@ EJEMPLOS:
   # Procesar XML completo (ambas etapas) - RECOMENDADO
   python3 main_wikidump_processor.py --xml data_wiki/eswiki-20250601-pages-articles-multistream.xml
   
-  # Solo ejecutar Stage 2 (usando JSONL existentes en data_ultra_hybrid)
-  python3 main_wikidump_processor.py --xml dummy.xml --skip-stage1
+  # Solo ejecutar Stage 2 usando directorio JSONL preprocesado
+  python3 main_wikidump_processor.py --jsonl data_ultra_hybrid
+  
+  # Usar directorio por defecto (data_test_ultra_hybrid)
+  python3 main_wikidump_processor.py
   
   # Especificar directorio de salida personalizado
-  python3 main_wikidump_processor.py --xml data_wiki/eswiki.xml --output wiki_conversaciones_custom
+  python3 main_wikidump_processor.py --jsonl data_ultra_hybrid --output wiki_conversaciones_custom
         """
     )
     
-    parser.add_argument(
+    # Grupo mutuamente exclusivo para XML o JSONL
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
         "--xml", 
-        required=True,
         help="Ruta al archivo XML de Wikipedia"
+    )
+    
+    input_group.add_argument(
+        "--jsonl",
+        help="Directorio con archivos JSONL preprocesados (Stage 1 ya ejecutado)"
     )
     
     parser.add_argument(
@@ -334,16 +370,30 @@ EJEMPLOS:
     parser.add_argument(
         "--skip-stage1", 
         action="store_true",
-        help="Omitir Stage 1 y usar archivos JSONL existentes"
+        help="Omitir Stage 1 y usar archivos JSONL existentes (deprecated: use --jsonl instead)"
+    )
+    
+    parser.add_argument(
+        "--questions-per-category",
+        type=int,
+        default=10,
+        help="Número de preguntas por categoría (default: 10, incluye 3-5 base + específicas)"
     )
     
     args = parser.parse_args()
     
+    # Manejar lógica de argumentos
+    if args.skip_stage1 and not args.xml and not args.jsonl:
+        # Comportamiento legacy: usar data_ultra_hybrid
+        args.jsonl = "data_ultra_hybrid"
+    
     # Crear y ejecutar el procesador principal
     processor = WikidumpMainProcessor(
         xml_path=args.xml,
+        jsonl_dir=args.jsonl,
         output_dir=args.output,
-        skip_stage1=args.skip_stage1
+        skip_stage1=args.skip_stage1,
+        questions_per_category=args.questions_per_category
     )
     
     success = processor.run()
