@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-🧠 CONTENT MANAGER REFACTORIZADO - Con carga de configuración desde JSON
+🧠 CONTENT MANAGER REFACTORIZADO - Con FormationSystem para generación
 ==================================================================================
-Módulo refactorizado que carga patrones y configuraciones desde archivos JSON
-en la carpeta formation/ para mayor mantenibilidad y separación de responsabilidades
+Módulo refactorizado que usa FormationSystem para generar conversaciones de alta calidad.
+El content_manager SOLO CONSUME configuraciones, no las modifica.
 
-ESTRUCTURA:
-- formation/fundamental.jsonl: Configuración base y patrones generales
-- formation/{categoria}.jsonl: Configuración específica por categoría
+ARQUITECTURA:
+- formation/fundamental.jsonl: Fuente de configuración (solo lectura)
+- formation_system: Interface para acceso a configuraciones
+- test_fundamental_quality_content.py: Tool para optimizar formation_training/fundamental.jsonl
 """
 import json
 import re
@@ -15,6 +16,11 @@ from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict, Counter
 from datetime import datetime
 from pathlib import Path
+
+# Importar FormationSystem 
+import sys
+sys.path.append(str(Path(__file__).parent / "formation_fundamental"))
+from formation_system import FormationFundamentalSystem
 
 
 class FormationLoader:
@@ -742,17 +748,21 @@ class CategoryManager:
 
 
 class ContentManager:
-    """Gestor de contenido principal refactorizado con carga desde JSON"""
+    """Gestor de contenido principal que usa FormationSystem para configuraciones"""
     
     def __init__(self, use_category_manager: bool = True, formation_dir: str = "formation"):
-        self.formation_loader = FormationLoader(formation_dir)
+        # Usar FormationSystem para acceso a configuraciones (solo lectura)
+        self.formation_system = FormationFundamentalSystem(formation_training_dir=formation_dir)
+        
+        # Cargar configuraciones desde formation_system
+        self.formation_loader = FormationLoader(formation_dir)  # Mantener compatibilidad
         self.categorizer = IntelligentCategorizer(self.formation_loader)
         self.category_manager = CategoryManager() if use_category_manager else None
         self.title_inference = TitleInferenceEngine(self.formation_loader)
         self.confidence_metrics = ConfidenceMetrics(self.formation_loader)
         
-        # Cargar plantillas desde JSON
-        self.conversation_templates = self.formation_loader.get_fundamental_data('conversation_templates_general')
+        # Cargar plantillas desde FormationSystem (no desde formation_loader)
+        self.conversation_templates = self.formation_system.get_conversation_templates()
         
         self.stats = {
             'articles_processed': 0,
@@ -761,7 +771,81 @@ class ContentManager:
             'conversation_time': 0,
             'conversation_errors': 0
         }
+    
+    def add_pattern_to_training(self, pattern_data: Dict[str, Any]) -> bool:
+        """
+        NUEVO MÉTODO: Permite que test_fundamental_quality_content.py agregue patrones
+        al fundamental.jsonl de formation_training (NO al de formation)
         
+        Args:
+            pattern_data: Datos del patrón a agregar
+            
+        Returns:
+            bool: True si se agregó exitosamente
+        """
+        try:
+            training_fundamental = Path("formation_training") / "fundamental.jsonl"
+            
+            # Crear entrada para el patrón
+            pattern_entry = {
+                'type': pattern_data.get('type', 'pattern_optimization'),
+                'data': pattern_data,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'test_fundamental_quality_content'
+            }
+            
+            # Agregar al archivo de training (NO al de formation)
+            with open(training_fundamental, 'a', encoding='utf-8') as f:
+                json.dump(pattern_entry, f, ensure_ascii=False)
+                f.write('\n')
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error agregando patrón a training: {e}")
+            return False
+    
+    def validate_conversation_quality(self, conversation: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        NUEVO MÉTODO: Usa formation_system para validar calidad de conversaciones
+        durante la generación (sin modificar configuraciones)
+        
+        Args:
+            conversation: Conversación a validar
+            
+        Returns:
+            dict: Resultado de validación con métricas
+        """
+        try:
+            # Usar formation_system para validación (solo lectura)
+            validation_result = self.formation_system.validate_conversation(conversation)
+            return validation_result
+            
+        except Exception as e:
+            return {
+                'is_valid': False,
+                'quality_score': 0.0,
+                'issues': [f'Error en validación: {e}'],
+                'metrics': {}
+            }
+    
+    def get_optimized_templates(self, content_type: str = None) -> Dict[str, Any]:
+        """
+        NUEVO MÉTODO: Obtiene templates optimizados desde formation_system
+        
+        Args:
+            content_type: Tipo de contenido específico
+            
+        Returns:
+            dict: Templates optimizados
+        """
+        try:
+            return self.formation_system.get_conversation_templates(content_type)
+        except Exception as e:
+            print(f"⚠️ Error obteniendo templates optimizados: {e}")
+            # Fallback a templates básicos
+            return self.conversation_templates
+    
     def process_article(self, article: Dict) -> Optional[Dict]:
         """Procesa un artículo completo de forma ultra-rápida"""
         title = article.get('title', '').strip()
@@ -779,15 +863,24 @@ class ContentManager:
             
             conversations = self.categorizer.generate_conversations_fast(title, content, category, subcategory)
             
+            # NUEVO: Validar calidad de conversaciones usando formation_system
+            validated_conversations = []
+            for conv in conversations:
+                validation = self.validate_conversation_quality(conv)
+                if validation.get('is_valid', False) and validation.get('quality_score', 0) > 0.5:
+                    conv['quality_score'] = validation['quality_score']
+                    conv['quality_metrics'] = validation.get('metrics', {})
+                    validated_conversations.append(conv)
+            
             self.stats['articles_processed'] += 1
-            self.stats['conversations_generated'] += len(conversations)
+            self.stats['conversations_generated'] += len(validated_conversations)
             
             return {
                 'title': title,
                 'content': content,
                 'category': final_category,
                 'subcategory': subcategory,
-                'conversations': conversations,
+                'conversations': validated_conversations,  # Usar conversaciones validadas
                 'confidence': confidence,
                 'content_type': self.title_inference.infer_type(title)
             }
