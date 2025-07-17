@@ -7,13 +7,14 @@ para máxima eficiencia en hardware de alto rendimiento (GH200, 8xH100)
 
 PIPELINE:
 1. ETAPA 1: Caroline Ultra Extractor (XML → JSONL intermedios)
-2. ETAPA 2: Full Dataset Training (JSONL → Datasets categorizados)
+2. ETAPA 2: Adaptive Processor (JSONL → Conversaciones + Consciencia)
 
 OPTIMIZACIONES:
 - Configuración adaptativa por hardware detectado
 - Monitoreo en tiempo real del rendimiento
 - Recuperación automática ante fallos
 - Validación de calidad de datos
+- Identificación temporal integrada (es/fue)
 """
 
 import os
@@ -32,19 +33,23 @@ from hardware_configs import get_hardware_config, print_hardware_info, detect_ha
 class WikidumpMainProcessor:
     """Procesador principal del pipeline completo de Wikidump"""
     
-    def __init__(self, xml_path: str, output_dir: str = "wiki-datasets", skip_stage1: bool = False):
+    def __init__(self, xml_path: str, output_dir: str = "wiki_conversations_complete", skip_stage1: bool = False):
         self.xml_path = Path(xml_path)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
         # Rutas para cada etapa
         self.stage1_output = Path("data_ultra_hybrid")
-        self.stage2_output = self.output_dir / "consciencia"
+        self.stage2_output = self.output_dir
         
         # Estado del pipeline
         self.skip_stage1 = skip_stage1
         self.hardware_type = detect_hardware()
         self.hardware_config = get_hardware_config()
+        
+        # Logging
+        self.log_file = "main_processing.log"
+        self.start_time = time.time()
         
         # Configurar manejo de señales
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -125,36 +130,53 @@ class WikidumpMainProcessor:
             return False
     
     def stage2_jsonl_to_datasets(self) -> bool:
-        """Ejecuta Stage 2: JSONL → Datasets usando Full Dataset Training"""
-        print("\n🧠 INICIANDO STAGE 2: JSONL → Datasets (Full Dataset Training)")
+        """Ejecuta Stage 2: JSONL → Conversaciones usando Adaptive Processor"""
+        print("\n🧠 INICIANDO STAGE 2: JSONL → Conversaciones (Adaptive Processor)")
         print("="*60)
         
         self.current_stage = 2
         start_time = time.time()
         
         try:
-            # Ejecutar full_dataset_for_training.py
+            # Ejecutar adaptive_processor.py
             cmd = [
                 sys.executable,
-                "full_dataset_for_training.py",
-                "--input", str(self.stage1_output),
-                "--output", str(self.stage2_output)
+                "adaptive_processor.py",
+                str(self.stage1_output),
+                str(self.stage2_output)
             ]
             
             print(f"📋 Ejecutando: {' '.join(cmd)}")
             
-            result = subprocess.run(
+            # Crear proceso para capturar salida en tiempo real
+            process = subprocess.Popen(
                 cmd,
                 cwd=Path.cwd(),
-                capture_output=False,
-                text=True,
-                check=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
             )
             
-            elapsed = time.time() - start_time
-            print(f"\n✅ STAGE 2 COMPLETADA en {elapsed:.1f}s")
+            # Mostrar salida en tiempo real
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    print(output.strip())
             
-            return self._validate_stage2_output()
+            # Esperar que termine y obtener código de salida
+            return_code = process.poll()
+            
+            elapsed = time.time() - start_time
+            
+            if return_code == 0:
+                print(f"\n✅ STAGE 2 COMPLETADA en {elapsed:.1f}s")
+                return self._validate_stage2_output()
+            else:
+                print(f"\n❌ STAGE 2 FALLÓ con código {return_code}")
+                return False
             
         except subprocess.CalledProcessError as e:
             print(f"❌ ERROR en Stage 2: {e}")
@@ -202,18 +224,29 @@ class WikidumpMainProcessor:
             print(f"❌ Directorio de Stage 2 no existe: {self.stage2_output}")
             return False
             
+        # Buscar archivos de conversaciones
+        conversation_files = list(self.stage2_output.glob("**/*.jsonl"))
         categories_dir = self.stage2_output / "categorias"
-        if not categories_dir.exists():
-            print(f"❌ Directorio de categorías no existe: {categories_dir}")
-            return False
-            
-        category_folders = [d for d in categories_dir.iterdir() if d.is_dir()]
+        consciencia_dir = self.stage2_output / "consciencia"
         
         print(f"✅ Stage 2 Output Validado:")
-        print(f"   📁 Categorías creadas: {len(category_folders)}")
+        print(f"   📁 Archivos de conversaciones: {len(conversation_files)}")
         print(f"   📂 Directorio base: {self.stage2_output}")
+        print(f"   🏷️ Categorías: {'✅' if categories_dir.exists() else '❌'}")
+        print(f"   🧠 Consciencia: {'✅' if consciencia_dir.exists() else '❌'}")
         
-        return True
+        # Contar conversaciones totales
+        total_conversations = 0
+        for file in conversation_files:
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    total_conversations += sum(1 for line in f if line.strip())
+            except:
+                pass
+        
+        print(f"   � Total conversaciones: {total_conversations:,}")
+        
+        return len(conversation_files) > 0
     
     def print_final_summary(self, total_time: float, stage1_success: bool, stage2_success: bool):
         """Imprime resumen final del procesamiento"""
@@ -225,11 +258,14 @@ class WikidumpMainProcessor:
         print(f"🖥️  HARDWARE: {self.hardware_type}")
         print(f"📊 ESTADO DE LAS ETAPAS:")
         print(f"   Stage 1 (XML→JSONL): {'✅' if stage1_success else '❌'}")
-        print(f"   Stage 2 (JSONL→Datasets): {'✅' if stage2_success else '❌'}")
+        print(f"   Stage 2 (JSONL→Conversaciones): {'✅' if stage2_success else '❌'}")
         
         if stage1_success and stage2_success:
             print(f"\n🎯 PIPELINE COMPLETADO CON ÉXITO")
-            print(f"📂 Datasets disponibles en: {self.stage2_output}")
+            print(f"📂 Conversaciones disponibles en: {self.stage2_output}")
+            print(f"🧠 Incluye identificación temporal (es/fue)")
+            print(f"🏷️ Con categorización automática")
+            print(f"🎭 Generación de consciencia incluida")
         else:
             print(f"\n⚠️ PIPELINE COMPLETADO CON ERRORES")
             
@@ -272,14 +308,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 EJEMPLOS:
-  # Procesar XML completo (ambas etapas)
+  # Procesar XML completo (ambas etapas) - RECOMENDADO
   python3 main_wikidump_processor.py --xml data_wiki/eswiki-20250601-pages-articles-multistream.xml
   
-  # Solo ejecutar Stage 2 (usando JSONL existentes)
+  # Solo ejecutar Stage 2 (usando JSONL existentes en data_ultra_hybrid)
   python3 main_wikidump_processor.py --xml dummy.xml --skip-stage1
   
   # Especificar directorio de salida personalizado
-  python3 main_wikidump_processor.py --xml data_wiki/eswiki.xml --output datasets_custom
+  python3 main_wikidump_processor.py --xml data_wiki/eswiki.xml --output wiki_conversaciones_custom
         """
     )
     
@@ -291,8 +327,8 @@ EJEMPLOS:
     
     parser.add_argument(
         "--output", 
-        default="wiki-datasets",
-        help="Directorio de salida para los datasets finales (default: wiki-datasets)"
+        default="wiki_conversations_complete",
+        help="Directorio de salida para las conversaciones finales (default: wiki_conversations_complete)"
     )
     
     parser.add_argument(
